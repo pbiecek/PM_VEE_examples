@@ -94,6 +94,14 @@ plot(cp_rf_31, variables = "class") +
   ylab("model response")+ 
   theme(plot.title = element_text(hjust = 0))
 
+
+
+cp_rf_31 <- ceteris_paribus(explain_titanic_rf, titanic[31,], variable_splits = list(age = seq(0,70,0.02), fare=seq(0,500,0.5), sibsp=seq(0,8,0.02), parch=seq(0,9,0.02)))
+plot(cp_rf_31) + 
+  show_observations(cp_rf_31) +
+  ylab("model response") + 
+  ggtitle("Ceteris Paribus Profiles for the model titanic_rf_v6") 
+
 ```
 
 
