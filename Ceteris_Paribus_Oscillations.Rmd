@@ -1,0 +1,54 @@
+---
+title: "Ceteris Paribus Oscillations"
+author: "Przemek Biecek"
+date: "4/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prepare model
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library("DALEX")
+library("randomForest")
+titanic <- na.omit(titanic)
+model_titanic_rf <- randomForest(survived == "yes" ~ gender + age + class + embarked +
+                                   fare + sibsp + parch,  data = titanic, ntree = 2500)
+model_titanic_rf
+
+explain_titanic_rf <- explain(model_titanic_rf, 
+                              data = titanic[,-9],
+                              y = titanic$survived == "yes", 
+                              label = "Random Forest v7")
+
+library("rms")
+model_titanic_lmr <- lrm(survived == "yes" ~ class + gender + rcs(age) + sibsp +
+                   parch + fare + embarked, titanic)
+explain_titanic_lmr <- explain(model_titanic_lmr, data = titanic, 
+                       y = titanic$survived == "yes", 
+                       predict_function = function(m,x) predict(m, x, type="fitted"),
+                       label = "Logistic regression")
+
+```
+
+# Grid with age and class
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library("ingredients")
+cp_lmr_31 <- ceteris_paribus(explain_titanic_lmr, titanic[31,])
+plot(cp_lmr_31) + 
+  show_observations(cp_lmr_31) +
+  ylab("model response") + 
+  ggtitle("Ceteris Paribus Profiles for the model titanic_lmr_v6") + 
+  theme(plot.title = element_text(hjust = 0))
+
+
+vips <- calculate_oscillations(cp_lmr_31)
+plot(vips[c(3,4,6,7),])
+
+```
+
+
