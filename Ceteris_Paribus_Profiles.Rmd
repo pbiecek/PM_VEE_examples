@@ -1,0 +1,99 @@
+---
+title: "Ceteris Paribus Profiles"
+author: "Przemek Biecek"
+date: "4/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prepare model
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library("DALEX")
+library("randomForest")
+titanic <- na.omit(titanic)
+model_titanic_rf <- randomForest(survived == "yes" ~ gender + age + class + embarked +
+                                   fare + sibsp + parch,  data = titanic, ntree = 2500)
+model_titanic_rf
+
+explain_titanic_rf <- explain(model_titanic_rf, 
+                              data = titanic[,-9],
+                              y = titanic$survived == "yes", 
+                              label = "Random Forest v7")
+
+library("rms")
+model_titanic_lmr <- lrm(survived == "yes" ~ class + gender + rcs(age) + sibsp +
+                   parch + fare + embarked, titanic)
+explain_titanic_lmr <- explain(model_titanic_lmr, data = titanic, 
+                       y = titanic$survived == "yes", 
+                       predict_function = function(m,x) predict(m, x, type="fitted"),
+                       label = "Logistic regression")
+
+```
+
+# Grid with age and class
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+age <- seq(0,100)
+class <- unique(titanic$class)
+titanic_grid <- titanic[rep(31, length(age)*length(class)),]
+
+titanic_grid$class <- rep(class, each = length(age))
+titanic_grid$age <- rep(age, times = length(class))
+
+titanic_grid$yhat <- predict(explain_titanic_lmr, titanic_grid)
+
+yhat <- matrix(titanic_grid$yhat, length(age), length(class))
+
+# change order
+yhat <- yhat[,c(4,5,6,7,3,2,1)]
+
+# duplicate
+yhat <- yhat[,rep(1:7, each=10)]
+
+titanic_grid$class <- reorder(titanic_grid$class, titanic_grid$yhat, mean)
+titanic_grid$yhat2 <- as.numeric(cut(titanic_grid$yhat, seq(0,1,length.out = 10)))
+
+baseline <- predict(explain_titanic_lmr, titanic[31,])
+
+ggplot(titanic_grid, aes(age, class)) +
+  geom_tile(aes(fill = yhat2)) + scale_fill_gradient2(name = "Prediction", 
+        midpoint = 5, low = "#2cd9dd", high = "#ff4940", 
+        mid = "#f0f0f4") + DALEX::theme_drwhy_vertical() + theme(legend.position = "none")
+
+library("plotly")
+pl_cp <- plot_ly(showscale = TRUE) %>%
+  add_surface(z = ~yhat, 
+              colorscale = list(c(0,1),c("#2cd9dd","#ff4940")))
+chart_link = api_create(pl_cp, filename="surface-contours-1")
+chart_link
+
+library("ingredients")
+cp_lmr_31 <- ceteris_paribus(explain_titanic_lmr, titanic[31,])
+plot(cp_lmr_31, variables = "age") + 
+  show_observations(cp_lmr_31, variables = "age") +
+  ylab("model response") + 
+  ggtitle("Ceteris Paribus Profiles for the model titanic_lmr_v6") + 
+  theme(plot.title = element_text(hjust = 0))
+plot(cp_lmr_31, variables = "class") + 
+  ylab("model response")+ 
+  ggtitle("Ceteris Paribus Profiles for the model titanic_lmr_v6") + 
+  theme(plot.title = element_text(hjust = 0))
+
+cp_rf_31 <- ceteris_paribus(explain_titanic_rf, titanic[31,], variable_splits = list(age = seq(0,70,0.02)))
+plot(cp_rf_31, variables = "age") + 
+  show_observations(cp_rf_31, variables = "age") +
+  ylab("model response") + 
+  ggtitle("Ceteris Paribus Profiles for the model titanic_rf_v6") + 
+  theme(plot.title = element_text(hjust = 0)) + ylim(0.1457, 0.8857)
+cp_rf_31 <- ceteris_paribus(explain_titanic_rf, titanic[31,])
+plot(cp_rf_31, variables = "class") + 
+  ylab("model response")+ 
+  theme(plot.title = element_text(hjust = 0))
+
+```
+
+
