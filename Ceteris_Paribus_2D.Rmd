@@ -1,0 +1,81 @@
+---
+title: "Ceteris Paribus 2D"
+author: "Przemek Biecek"
+date: "4/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Prepare model
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library("DALEX")
+# Toy examples, because CRAN angels ask for them
+titanic <- na.omit(titanic)
+model_titanic_glm <- glm(survived == "yes" ~ gender + age + fare,
+                       data = titanic, family = "binomial")
+
+explain_titanic_glm <- explain(model_titanic_glm,
+                           data = titanic[,-9],
+                           y = titanic$survived == "yes")
+library("ingredients")
+cp_rf <- ceteris_paribus_2d(explain_titanic_glm, titanic[1,])
+head(cp_rf)
+plot(cp_rf)
+ 
+library("randomForest")
+set.seed(59)
+
+apartments_rf_model <- randomForest(m2.price ~ construction.year + surface + floor +
+      no.rooms + district, data = apartments)
+
+explainer_rf <- explain(apartments_rf_model,
+      data = apartmentsTest[,2:6], y = apartmentsTest$m2.price)
+
+new_apartment <- apartmentsTest[1, ]
+new_apartment
+
+wi_rf_2d <- ceteris_paribus_2d(explainer_rf, observation = new_apartment,
+         variables = c("surface", "floor", "no.rooms"))
+head(wi_rf_2d)
+plot(wi_rf_2d)
+
+```
+
+# Titanic
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library("DALEX")
+library("randomForest")
+titanic <- na.omit(titanic)
+model_titanic_rf <- randomForest(survived == "yes" ~ gender + age + class + embarked +
+                                   fare + sibsp + parch,  data = titanic, ntree = 2500)
+
+explain_titanic_rf <- explain(model_titanic_rf, 
+                              data = titanic[,-9],
+                              y = titanic$survived == "yes", 
+                              label = "Random Forest v7")
+
+library("rms")
+model_titanic_lmr <- lrm(survived == "yes" ~ class + gender + rcs(age) + sibsp +
+                   parch + fare + embarked, titanic)
+explain_titanic_lmr <- explain(model_titanic_lmr, data = titanic, 
+                       y = titanic$survived == "yes", 
+                       predict_function = function(m,x) predict(m, x, type="fitted"),
+                       label = "Logistic regression")
+
+
+library("ingredients")
+wi_rf_2d <- ceteris_paribus_2d(explain_titanic_lmr, observation = titanic[31,])
+head(wi_rf_2d)
+plot(wi_rf_2d) + theme(legend.position = "right", legend.direction = "vertical") + ggtitle("Ceteris Paribus 2D Profiles")
+
+wi_rf_2d <- ceteris_paribus_2d(explain_titanic_lmr, observation = titanic[31,], variables = c("age", "sibsp"))
+head(wi_rf_2d)
+plot(wi_rf_2d) + xlab("age") + ylab("sibsp") + theme(legend.position = "right", legend.direction = "vertical") + ggtitle("Ceteris Paribus 2D Profiles")
+
+```
+

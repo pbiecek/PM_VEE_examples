@@ -1,0 +1,228 @@
+---
+title: "Ceteris Paribus Local diagnostic"
+author: "Przemek Biecek"
+date: "4/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Titanic
+
+```{r, warning=FALSE, message=FALSE}
+library("DALEX")
+library("randomForest")
+titanic <- na.omit(titanic)
+model_titanic_rf <- randomForest(survived == "yes" ~ age + gender + class + 
+                                   sibsp + parch,  data = titanic, ntree = 250)
+
+model_titanic_rf <- randomForest(survived == "yes" ~ gender + age + class + embarked +
+                                   fare + sibsp + parch,  data = titanic, ntree = 2500)
+
+explain_titanic_rf <- explain(model_titanic_rf, 
+                              data = titanic[,-9],
+                              y = titanic$survived == "yes", 
+                              label = "Random Forest v7")
+
+library("rms")
+model_titanic_lmr <- lrm(survived == "yes" ~ class + gender + rcs(age) + sibsp +
+                   parch + fare + embarked, titanic)
+explain_titanic_lmr <- explain(model_titanic_lmr, data = titanic, 
+                       y = titanic$survived == "yes", 
+                       predict_function = function(m,x) predict(m, x, type="fitted"),
+                       label = "Logistic regression")
+
+library("ingredients")
+library("ggplot2")
+
+johny_d <- data.frame(
+  class = factor("1st", levels = c("1st", "2nd", "3rd", "deck crew", "engineering crew", 
+                                  "restaurant staff", "victualling crew")),
+  gender = factor("male", levels = c("female", "male")),
+  age = 8,
+  sibsp = 0,
+  parch = 0,
+  fare = 72,
+  embarked = factor("Southampton", levels = c("Belfast", "Cherbourg", "Queenstown", "Southampton"))
+)
+
+johny_neighbours <- select_neighbours(data = titanic,
+                  observation = johny_d,
+                  variables = c("age", "class", "gender"),
+                  n = 10)
+
+johny_neighbours <- select_neighbours(data = titanic,
+                  observation = johny_d,
+                  variables = "age",
+                  n = 10)
+
+cp_rf_sel <- ceteris_paribus(explain_titanic_rf, johny_neighbours[8,],
+                         variable_splits = list(age = seq(0,70, length.out = 1000)))
+cp_rf <- ceteris_paribus(explain_titanic_rf, johny_neighbours,
+                         y = johny_neighbours$survived == "yes",
+                         variable_splits = list(age = seq(0,70, length.out = 1000)))
+head(cp_rf)
+plot(cp_rf, variables = c("age", "gender", "class"), color = "#ceced9") +
+  show_profiles(cp_rf_sel, variables = "age", size = 2) + 
+  ggtitle("Ceteris Paribus Profiles","for selected observation and 10 nearest neighbours")
+
+
+cp_rf <- ceteris_paribus(explain_titanic_rf, johny_neighbours,
+                         y = johny_neighbours$survived == "yes")
+cp_rf_johny <- ceteris_paribus(explain_titanic_rf, johny_d)
+head(cp_rf)
+plot(cp_rf, variables = c("age", "fare", "gender", "class"), color = "gender") +
+  show_observations(cp_rf, variables = c("age", "fare"))
+
+plot(cp_rf, variables = c("age", "fare", "gender", "class"), color = "class") +
+  show_observations(cp_rf, variables = c("age", "fare"))
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1313)
+
+johny_neighbours <- select_neighbours(data = titanic,
+                  observation = johny_d,
+                  variables = c("age", "gender", "class", "fare", "sibsp", "parch"),
+                  n = 10)
+
+johny_neighbours <- select_neighbours(data = titanic,
+                  observation = johny_d,
+                  variables = c("age", "fare", "sibsp", "parch"),
+                  n = 10)
+
+
+cp_rf <- ceteris_paribus(explain_titanic_rf, johny_neighbours,
+                         y = johny_neighbours$survived == "yes",
+                         variable_splits = list(age = seq(0,70, length.out = 1000)))
+head(cp_rf)
+johny_neighbours$`_x_` = 1
+johny_neighbours$`_label_` = 1
+
+selected_observations <- attr(cp_rf, "observations")
+selected_observations$`_sign_` <- selected_observations$`_y_` > selected_observations$`_yhat_`
+
+
+plot(cp_rf, variables = "age", color = "#ceced9", alpha = 0.5) +
+#  show_observations(cp_rf, variables = "age") +
+  show_profiles(cp_rf_johny, variables = "age", size = 1.5, color = "#8bdcbe") +
+  show_observations(cp_rf_johny, variables = "age", size = 5, color = "#371ea3") +
+  geom_point(data = selected_observations, aes(x = age, y = `_y_` + 0, color  = `_sign_`), size = 2) +
+  geom_linerange(data = selected_observations, aes(x = age, ymin = `_y_` + 0, ymax = `_yhat_`, color  = `_sign_`)) +
+  scale_color_manual(values = c('TRUE' = '#371ea3', 'FALSE' = '#f05a71')) +
+  theme(legend.position = "none")
+
+plot(cp_rf_johny, variables = "age", size = 1.5, color = "#8bdcbe")+
+  geom_point(data = selected_observations, aes(x = age, y = `_y_` + 0, color  = `_sign_`), size = 2) +
+  geom_linerange(data = selected_observations, aes(x = age, ymin = `_y_` + 0, ymax = `_yhat_`, color  = `_sign_`)) +
+  scale_color_manual(values = c('TRUE' = '#371ea3', 'FALSE' = '#f05a71')) +
+  theme(legend.position = "none") +
+  show_observations(cp_rf, variables = "age", color = '#ceced9') +
+  show_observations(cp_rf_johny, variables = "age", size = 5, color = "#371ea3") 
+
+
+
+
+cp_rf_johny <- ceteris_paribus(explain_titanic_rf, johny_d,
+                 variable_splits = list(age = seq(0,70, length.out = 1000)))
+
+
+plot(cp_rf_johny, variables = "age", size = 1.5, color = "#8bdcbe") +
+  show_profiles(cp_rf, variables = "age", color = "#ceced9") + 
+  show_observations(cp_rf_johny, variables = "age", size = 5, color = "#371ea3") +
+  show_residuals(cp_rf, variables = "age", size  = 1) +
+  ggtitle("Local fidelity plot", "for titanic_rf_v6 model and Johnny D neighbors")
+
+
+```
+
+# Apartments
+
+```{r, warning=FALSE, message=FALSE}
+library("archivist")
+apartments_rf_v5 <- archivist::aread("pbiecek/models/fe7a5")
+
+explain_rf_v5 <- explain(apartments_rf_v5, 
+        data = apartments_test, y = apartments_test$m2.price)
+
+selected_apartment <- apartments_test[161,] 
+similar_apartments <- select_neighbours(apartments, selected_apartment, n   = 10)
+
+cp_all <- ceteris_paribus(explain_rf_v5, apartments_test,
+                         y = apartments_test$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+cp_apartment <- ceteris_paribus(explain_rf_v5, selected_apartment,
+                         y = selected_apartment$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+cp_similar <- ceteris_paribus(explain_rf_v5, similar_apartments,
+                         y = similar_apartments$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+
+plot(cp_apartment, variables = "surface", size = 1.5, color = "#8bdcbe") +
+  show_profiles(cp_similar, variables = "surface", color = "#ceced9") + 
+  show_observations(cp_apartment, variables = "surface", size = 5, color = "#371ea3") +
+  show_residuals(cp_similar, variables = "surface") 
+
+
+apartments_lm_v5 <- archivist::aread("pbiecek/models/55f19")
+
+explain_lm_v5 <- explain(apartments_lm_v5, 
+        data = apartments_test, y = apartments_test$m2.price)
+
+cp_all_lm <- ceteris_paribus(explain_lm_v5, apartments_test,
+                         y = apartments_test$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+cp_apartment_lm <- ceteris_paribus(explain_lm_v5, selected_apartment,
+                         y = selected_apartment$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+cp_similar_lm <- ceteris_paribus(explain_lm_v5, similar_apartments,
+                         y = similar_apartments$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+
+plot(cp_apartment, variables = "surface", size = 1.5, color = "#8bdcbe") +
+  show_profiles(cp_similar, variables = "surface", color = "#ceced9") + 
+  show_observations(cp_apartment, variables = "surface", size = 5, color = "#371ea3") +
+  show_residuals(cp_similar, variables = "surface") 
+
+
+
+
+
+
+
+similar_apartments <- select_neighbours(apartments, selected_apartment, n   = 25)
+cp_similar <- ceteris_paribus(explain_rf_v5, similar_apartments,
+                         y = similar_apartments$m2.price,
+                         variable_splits = list(surface = seq(20, 150, 0.1)))
+
+
+obs_all_rf <- attr(cp_all, "observations")
+obs_all_rf$`_label_` = "Random Forest all obs"
+obs_sim_rf <- attr(cp_similar, "observations")
+obs_sim_rf$`_label_` = "Random Forest single obs"
+
+all_obs <- rbind(obs_all_rf, obs_sim_rf)
+all_obs$residual <- all_obs$`_y_` - all_obs$`_yhat_`
+
+ggplot(all_obs, aes(residual)) +
+  geom_dotplot() + 
+  facet_wrap(~`_label_`, ncol = 1, scales = "free_y") + 
+  theme_drwhy()
+
+ggplot(all_obs, aes(`_label_`, residual, fill = `_label_`)) +
+  geom_violin() + 
+  coord_flip() +
+  geom_hline(yintercept = 0) +
+  theme_drwhy() + xlab("") + ylab("") + theme(legend.position = "none")
+
+ggplot(all_obs, aes(residual, fill = `_label_`)) +
+  geom_histogram(binwidth = 100) + 
+  facet_wrap(~`_label_`, ncol = 1, scales = "free_y") + 
+  theme_drwhy() + xlim(-1400,1400)
+
+```
+
